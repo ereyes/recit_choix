@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Narrative (CSV-powered)</title>
+<style>
+  :root { --radius: 16px; --shadow: 0 10px 25px rgba(0,0,0,.15); }
+  *{box-sizing:border-box} html,body{height:100%;margin:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;transition:background-color .4s ease,color .25s ease}
+  .screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:clamp(16px,4vw,48px)}
+  .wrap{width:min(100%,960px);text-align:center}
+  .topbar{position:fixed;top:10px;right:10px;display:flex;gap:8px}
+  .btn{display:inline-block;padding:10px 14px;border-radius:12px;border:0;background:#111;color:#fff;cursor:pointer;font-weight:600;transition:transform .12s ease,opacity .12s ease}
+  .btn:hover{transform:translateY(-1px);opacity:.95} .btn:active{transform:translateY(0);opacity:.9}
+  .btn--light{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45)}
+  .kicker{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.15);font-size:.9rem;margin-bottom:10px}
+  h1{margin:0 0 18px;font-size:clamp(22px,4.5vw,44px);letter-spacing:.2px}
+  .subtitle{margin:0 0 22px;opacity:.9}
+  .choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:12px}
+  .choice{background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.35);border-radius:var(--radius);padding:22px;cursor:pointer;user-select:none;outline:none;transition:transform .18s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease;box-shadow:var(--shadow)}
+  .choice strong{display:block;font-size:1.15rem;margin-bottom:6px} .choice small{opacity:.95}
+  .choice:hover{transform:translateY(-3px);background:rgba(255,255,255,.20)} .choice:focus-visible{box-shadow:0 0 0 4px rgba(255,255,255,.45)}
+  .help{margin-top:18px;opacity:.9}
+  .bg-blue{background:linear-gradient(145deg,#0d6efd,#4dabff);color:#fff}
+  .bg-green{background:linear-gradient(145deg,#16a34a,#40c057);color:#fff}
+  .bg-red{background:linear-gradient(145deg,#dc2626,#ff6b6b);color:#fff}
+  .bg-white{background:#ffffff;color:#121212}
+  .card{max-width:720px;margin:0 auto;background:#fff;color:#121212;border:1px solid rgba(0,0,0,.08);border-radius:var(--radius);box-shadow:var(--shadow);padding:clamp(18px,3vw,28px);text-align:left}
+  .result-list{margin:0;padding:0;list-style:none} .result-list li{padding:10px 0;border-top:1px solid rgba(0,0,0,.08)} .result-list li:first-child{border-top:0}
+  @media (max-width:860px){.choices{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){.choice,body{transition:none}.choice:hover{transform:none}}
+  .sr-only{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;border:0;padding:0}
+</style>
+</head>
+<body class="bg-blue">
+  <main id="stage" class="screen">
+    <div id="content" class="wrap"></div>
+    <div id="live" class="sr-only" aria-live="polite"></div>
+  </main>
+
+  <!-- Controls for CSV -->
+  <div class="topbar" aria-label="CSV controls">
+    <button class="btn btn--light" id="reloadCsvBtn" title="Reload choices.csv">Reload CSV</button>
+    <button class="btn btn--light" id="uploadCsvBtn" title="Upload a CSV file">Upload CSV</button>
+    <input type="file" id="csvFileInput" accept=".csv,text/csv" hidden />
+  </div>
+
+  <!-- Fallback embedded CSV (edit here if you prefer inline) -->
+  <script id="choices-csv" type="text/csv">
+step,step_title,step_subtitle,step_bg,label,description
+1,Where does your journey begin?,Step 1 of 3,blue,Forest,"Whispering pines and hidden paths."
+1,Where does your journey begin?,Step 1 of 3,blue,City,"Neon lights and crowded streets."
+1,Where does your journey begin?,Step 1 of 3,blue,Sea,"Salt air, gulls, and distant horizons."
+2,Who travels with you?,Step 2 of 3,green,Fox,"Clever, quick, and quiet."
+2,Who travels with you?,Step 2 of 3,green,Robot,"Reliable, logical, and luminous."
+2,Who travels with you?,Step 2 of 3,green,Bard,"Songs for courage and clues."
+3,What do you seek?,Step 3 of 3,red,Treasure,"Gold, relics, and long-lost maps."
+3,What do you seek?,Step 3 of 3,red,Wisdom,"Answers to questions not yet asked."
+3,What do you seek?,Step 3 of 3,red,Freedom,"No walls. No limits. Open skies."
+  </script>
+
+  <script>
+    /***********************
+     * CSV → rows
+     ***********************/
+    function parseCSV(text) {
+      text = String(text || '').replace(/^\uFEFF/, ''); // strip BOM
+      const rows = [];
+      let field = '', row = [], inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else { inQuotes = false; }
+          } else {
+            field += c;
+          }
+        } else {
+          if (c === '"') inQuotes = true;
+          else if (c === ',') { row.push(field); field = ''; }
+          else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+          else if (c === '\r') { /* ignore */ }
+          else field += c;
+        }
+      }
+      if (field.length > 0 || row.length) { row.push(field); rows.push(row); }
+
+      if (!rows.length) return [];
+      const headers = rows[0].map(h => h.trim());
+      return rows.slice(1).filter(r => r.length && r.some(cell => String(cell).trim() !== ''))
+        .map(r => {
+          const obj = {};
+          headers.forEach((h, i) => obj[h] = (r[i] ?? '').trim());
+          return obj;
+        });
+    }
+
+    /***********************
+     * Rows → Steps model
+     ***********************/
+    function buildSteps(rows) {
+      // Group by step number
+      const groups = {};
+      rows.forEach(r => {
+        const s = Number(r.step || 0);
+        if (!groups[s]) groups[s] = [];
+        groups[s].push(r);
+      });
+
+      const defaults = {
+        1: { bgClass: 'bg-blue',  subtitle: 'Step 1 of 3', title: 'Step 1' },
+        2: { bgClass: 'bg-green', subtitle: 'Step 2 of 3', title: 'Step 2' },
+        3: { bgClass: 'bg-red',   subtitle: 'Step 3 of 3', title: 'Step 3' }
+      };
+
+      const steps = [1,2,3].map(n => {
+        const rows = (groups[n] || []).slice(0); // copy
+        const meta = rows[0] || {};
+        const bg = String(meta.step_bg || '').toLowerCase();
+        const bgClass = (bg === 'blue' ? 'bg-blue' : bg === 'green' ? 'bg-green' : bg === 'red' ? 'bg-red' : defaults[n].bgClass);
+        const title = meta.step_title || defaults[n].title;
+        const subtitle = meta.step_subtitle || defaults[n].subtitle;
+
+        const choices = rows
+          .map(r => ({ label: r.label || '—', description: r.description || '' }))
+          .slice(0, 3); // enforce 3 DIVs
+
+        // If fewer than 3, pad with blanks so layout stays consistent
+        while (choices.length < 3) choices.push({ label: '—', description: '' });
+
+        return { id: `step${n}`, bgClass, title, subtitle, choices };
+      });
+
+      return steps;
+    }
+
+    /***********************
+     * Rendering + UX
+     ***********************/
+    let STEPS = [];                  // populated from CSV
+    let currentStep = 0;
+    let choice1 = null, choice2 = null, choice3 = null;   // requested variables
+    const selections = [];          // convenience array
+
+    const contentEl = document.getElementById('content');
+    const liveEl = document.getElementById('live');
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&','&amp;').replaceAll('<','&lt;')
+        .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    }
+
+    function renderStep() {
+      const step = STEPS[currentStep];
+      document.body.className = step.bgClass;
+
+      const choicesHtml = step.choices.map((c, idx) => `
+        <div class="choice" role="button" tabindex="0"
+             data-index="${idx}"
+             aria-label="${escapeHtml(c.label)}${c.description ? (', ' + escapeHtml(c.description)) : ''}">
+          <strong>${escapeHtml(c.label)}</strong>
+          ${c.description ? `<small>${escapeHtml(c.description)}</small>` : ''}
+        </div>
+      `).join('');
+
+      contentEl.innerHTML = `
+        <div class="kicker" aria-hidden="true">${escapeHtml(step.subtitle)}</div>
+        <h1 id="step-title">${escapeHtml(step.title)}</h1>
+        <p class="subtitle">Choose one of the options below.</p>
+        <div class="choices" aria-labelledby="step-title">
+          ${choicesHtml}
+        </div>
+        <p class="help">Tip: use <kbd>Tab</kbd> to focus, then <kbd>Enter</kbd> or <kbd>Space</kbd> to select.</p>
+      `;
+
+      contentEl.querySelectorAll('.choice').forEach(el => {
+        el.addEventListener('click', onChoose);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChoose.call(el, e); }
+        });
+      });
+
+      liveEl.textContent = `${step.subtitle}: ${step.title}`;
+    }
+
+    function renderResult() {
+      document.body.className = 'bg-white';
+      const [first, second, third] = selections;
+      const summary = [first, second, third].filter(Boolean).join(' → ') || 'No selections recorded.';
+
+      contentEl.innerHTML = `
+        <div class="wrap">
+          <div class="kicker" aria-hidden="true">Result</div>
+          <h1>Your 3-step path</h1>
+          <div class="card" role="region" aria-label="Result summary">
+            <ul class="result-list">
+              <li><strong>First (blue):</strong> ${escapeHtml(first ?? '—')}</li>
+              <li><strong>Second (green):</strong> ${escapeHtml(second ?? '—')}</li>
+              <li><strong>Third (red):</strong> ${escapeHtml(third ?? '—')}</li>
+            </ul>
+            <p style="margin-top:12px;"><em>Summary:</em> ${escapeHtml(summary)}</p>
+            <button class="btn" id="restartBtn">Start over</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('restartBtn').addEventListener('click', () => {
+        currentStep = 0; choice1 = choice2 = choice3 = null; selections.length = 0; renderStep();
+      });
+
+      liveEl.textContent = 'Result screen. Selections shown.';
+    }
+
+    function onChoose() {
+      const idx = Number(this.dataset.index);
+      const step = STEPS[currentStep];
+      const picked = step.choices[idx]?.label || '—';
+
+      if (currentStep === 0) { choice1 = picked; selections[0] = picked; }
+      else if (currentStep === 1) { choice2 = picked; selections[1] = picked; }
+      else if (currentStep === 2) { choice3 = picked; selections[2] = picked; }
+
+      currentStep++;
+      if (currentStep < STEPS.length) renderStep();
+      else renderResult();
+    }
+
+    /***********************
+     * CSV loading pipeline
+     ***********************/
+    async function loadCSVExternal() {
+      // Try to fetch choices.csv next to this HTML
+      try {
+        const res = await fetch('choices.csv', { cache: 'no-store' });
+        if (!res.ok) return null;
+        return await res.text();
+      } catch (e) {
+        return null; // probably blocked by file:// security or missing file
+      }
+    }
+
+    function loadCSVEmbedded() {
+      const node = document.getElementById('choices-csv');
+      return node ? node.textContent : '';
+    }
+
+    async function initFromCSVText(csvText) {
+      const rows = parseCSV(csvText);
+      if (!rows.length) throw new Error('CSV parsed but no rows found.');
+      STEPS = buildSteps(rows);
+      currentStep = 0; choice1 = choice2 = choice3 = null; selections.length = 0;
+      renderStep();
+    }
+
+    async function bootstrap() {
+      const external = await loadCSVExternal();
+      if (external) {
+        await initFromCSVText(external);
+      } else {
+        // Fallback to embedded CSV
+        await initFromCSVText(loadCSVEmbedded());
+      }
+    }
+
+    /***********************
+     * Upload CSV support
+     ***********************/
+    const fileInput = document.getElementById('csvFileInput');
+    const uploadBtn = document.getElementById('uploadCsvBtn');
+    const reloadBtn = document.getElementById('reloadCsvBtn');
+
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      try { await initFromCSVText(text); }
+      catch (err) { alert('Could not parse the uploaded CSV. Please check the headers and content.'); }
+      finally { fileInput.value = ''; }
+    });
+
+    reloadBtn.addEventListener('click', bootstrap);
+
+    // Kick things off
+    bootstrap();
+  </script>
+</body>
+</html>

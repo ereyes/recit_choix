@@ -1,0 +1,10 @@
+step,step_title,step_subtitle,step_bg,label,description
+1,Où commence votre voyage ?,Étape 1 sur 3,bleu,Forêt,"Des pins qui chuchotent et des sentiers cachés."
+1,Où commence votre voyage ?,Étape 1 sur 3,bleu,Ville,"Néons et rues bondées."
+1,Où commence votre voyage ?,Étape 1 sur 3,bleu,Mer,"Air salin, mouettes et horizons lointains."
+2,Qui voyage avec vous ?,Étape 2 sur 3,vert,Renard,"Rusé, rapide et discret."
+2,Qui voyage avec vous ?,Étape 2 sur 3,vert,Robot,"Fiable, logique et lumineux."
+2,Qui voyage avec vous ?,Étape 2 sur 3,vert,Barde,"Des chansons pour le courage et des indices."
+3,Que cherchez-vous ?,Étape 3 sur 3,rouge,Trésor,"De l'or, des reliques et des cartes perdues depuis longtemps."
+3,Que cherchez-vous ?,Étape 3 sur 3,rouge,Sagesse,"Des réponses à des questions pas encore posées."
+3,Que cherchez-vous ?,Étape 3 sur 3,rouge,Liberté,"Pas de murs. Pas de limites. Ciel ouvert."
