@@ -1,10 +1,10 @@
 # recit_choix
 
+Prototype simple :  
 https://ereyes.github.io/recit_choix/01-choices.html
-Prototype simple.
 
+Application web minimaliste qui propose une narration interactive en 3 étapes :  
 https://ereyes.github.io/recit_choix/02-choices-csv.html 
-Application web minimaliste qui propose une narration interactive en 3 étapes :
 
 * **Écran 1 (bleu)** : 3 choix (divs) → on enregistre le choix
 * **Écran 2 (vert)** : 3 choix → on enregistre le choix
